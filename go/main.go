@@ -1,24 +1,68 @@
 package main
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
+	"log"
+	"net/http"
 
-	_ "github.com/tarantool/go-tarantool"
-	// _ "github.com/fl00r/go-tarantool-1.6"
+	"github.com/gorilla/mux"
+	tarantool "github.com/viciious/go-tarantool"
 )
 
+// spaces: post{id unsigned, content string}, comment {id unsigned, content string, ref unsigned}
+
+type Post struct {
+	ID      int    `json:"id"`
+	Content string `json:"content"`
+}
+
+var (
+	host = "127.0.0.1:3301"
+	user = "admin"
+	pass = "pass"
+)
+
+func connect(host, user, pass string) (*tarantool.Connection, error) {
+	opts := tarantool.Options{User: user, Password: pass}
+	conn, err := tarantool.Connect(host, &opts)
+	if err != nil {
+		return &tarantool.Connection{}, err
+	}
+	return conn, nil
+}
+
+func createPostHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("handler 1")
+	reqBody, _ := ioutil.ReadAll(r.Body)
+
+	var p Post
+
+	json.Unmarshal(reqBody, &p)
+
+	conn, _ := connect(host, user, pass)
+	query := &tarantool.Eval{
+		Expression: "box.space.post:auto_increment{...}",
+		Tuple:      []interface{}{p.Content},
+	}
+	resp := conn.Exec(context.Background(), query)
+	log.Println(resp)
+	if resp.Error == nil {
+		w.Write([]byte("ok"))
+	} else {
+		w.Write([]byte(fmt.Sprintf("%v", resp)))
+	}
+}
+
 func main() {
-	fmt.Println("Hello 1")
-	// opts := tarantool.Opts{User: "admin", Pass: "pass"}
-	// conn, err := tarantool.Connect("127.0.0.1:3301", opts)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// defer conn.Close()
-	// resp, err := conn.Insert(999, []interface{}{99999, "BB"})
-	// if err != nil {
-	// 	fmt.Println("Error", err)
-	// 	fmt.Println("Code", resp.Code)
-	// }
-	fmt.Println("Hello 2")
+	fmt.Println("(~_~) Hello (~_~)")
+	r := mux.NewRouter()
+	// r.HandleFunc("/", HomeHandler)
+	r.HandleFunc("/post", createPostHandler).Methods("Post")
+	http.Handle("/", r)
+
+	fmt.Println("Server is listening...")
+	http.ListenAndServe(":8085", nil)
 }
