@@ -12,8 +12,6 @@ import (
 	tarantool "github.com/viciious/go-tarantool"
 )
 
-// spaces: post{id unsigned, content string}, comment {id unsigned, content string, ref unsigned}
-
 type Post struct {
 	ID      int    `json:"id"`
 	Content string `json:"content"`
@@ -35,7 +33,7 @@ func connect(host, user, pass string) (*tarantool.Connection, error) {
 }
 
 func createPostHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("handler 1")
+	log.Printf("createPostHandler")
 	reqBody, _ := ioutil.ReadAll(r.Body)
 
 	var p Post
@@ -47,6 +45,7 @@ func createPostHandler(w http.ResponseWriter, r *http.Request) {
 		Expression: "box.space.post:auto_increment{...}",
 		Tuple:      []interface{}{p.Content},
 	}
+
 	resp := conn.Exec(context.Background(), query)
 	log.Println(resp)
 	if resp.Error == nil {
