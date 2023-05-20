@@ -11,6 +11,9 @@ box.space.post:insert{0, "post text"}
 // Записать логический дамп
 local status, error = require('dump').dump('/tmp/dump')
 
+// Выполнить SQL из Lua
+box.execute([[SELECT * FROM my_table;]]);
+
 // ===== Spaces =====
 
 /*
