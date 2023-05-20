@@ -58,7 +58,6 @@ func createPostHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	fmt.Println("(~_~) Hello (~_~)")
 	r := mux.NewRouter()
-	// r.HandleFunc("/", HomeHandler)
 	r.HandleFunc("/post", createPostHandler).Methods("Post")
 	http.Handle("/", r)
 
