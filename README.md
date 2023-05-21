@@ -26,6 +26,15 @@ post = box.schema.space.create('post', {engine= 'vinyl'})
 
 // Создать пост
 box.space.post:auto_increment{"post text"}
+box.space.post:format({
+         {name = 'id', type = 'unsigned'},
+         {name = 'band_name', type = 'string'},
+         {name = 'year', type = 'unsigned'}
+         })
+box.space.post:s:create_index('primary', {
+         type = 'tree',
+         parts = {'id'}
+         })
 box.space.post:insert{0, "post text"}
 
 

@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
+	"strconv"
 
 	"github.com/gorilla/mux"
 	tarantool "github.com/viciious/go-tarantool"
@@ -17,8 +18,17 @@ type Post struct {
 	Content string `json:"content"`
 }
 
+type Comment struct {
+	Post
+	Ref int `json:"ref"`
+}
+
 type PostsColletion struct {
 	Posts []Post `json:"posts"`
+}
+
+type CommentColletion struct {
+	Comments []Comment `json:"comments"`
 }
 
 var (
@@ -60,6 +70,34 @@ func readAllPostsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(payload)
 }
 
+func readPostComments(w http.ResponseWriter, r *http.Request) {
+	log.Printf("readPostComments")
+
+	idStr := r.URL.Query().Get("id")
+	id, _ := strconv.Atoi(idStr)
+
+	conn, _ := connect(host, user, pass)
+	defer conn.Close()
+
+	query := &tarantool.Select{Space: "comment", Index: "ref_idx", Key: id}
+	resp := conn.Exec(context.Background(), query)
+
+	if resp.Error != nil {
+		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
+	}
+
+	payload := CommentColletion{make([]Comment, 0)}
+	cm := Comment{}
+	for _, tuple := range resp.Data {
+		cm.ID = int(tuple[0].(int64))
+		cm.Content = tuple[1].(string)
+		cm.Ref = int(tuple[2].(int64))
+		payload.Comments = append(payload.Comments, cm)
+	}
+
+	json.NewEncoder(w).Encode(payload)
+}
+
 func createPostHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("createPostHandler")
 	reqBody, _ := ioutil.ReadAll(r.Body)
@@ -88,6 +126,7 @@ func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/post", createPostHandler).Methods("Post")
 	r.HandleFunc("/posts", readAllPostsHandler).Methods("Get")
+	r.HandleFunc("/comments", readPostComments).Methods("Get")
 	http.Handle("/", r)
 
 	fmt.Printf("Server is listening on %s\n", accessPort)
