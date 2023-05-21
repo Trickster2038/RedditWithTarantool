@@ -162,10 +162,34 @@ func createCommentHandler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func resetHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("resetHandler")
+
+	conn, _ := connect(host, user, pass)
+	defer conn.Close()
+
+	query := &tarantool.Eval{Expression: "box.space.post:truncate()"}
+	resp := conn.Exec(context.Background(), query)
+	if resp.Error != nil {
+		w.Write([]byte(fmt.Sprintf("%v", resp)))
+		return
+	}
+
+	query = &tarantool.Eval{Expression: "box.space.comment:truncate()"}
+	resp = conn.Exec(context.Background(), query)
+
+	if resp.Error == nil {
+		w.Write([]byte("ok"))
+	} else {
+		w.Write([]byte(fmt.Sprintf("%v", resp)))
+	}
+}
+
 func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/post", createPostHandler).Methods("Post")
 	r.HandleFunc("/comment", createCommentHandler).Methods("Post")
+	r.HandleFunc("/reset", resetHandler).Methods("Post")
 	r.HandleFunc("/posts", readAllPostsHandler).Methods("Get")
 	r.HandleFunc("/comments", readPostComments).Methods("Get")
 	http.Handle("/", r)
