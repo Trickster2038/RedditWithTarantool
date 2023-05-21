@@ -48,7 +48,7 @@ func connect(host, user, pass string) (*tarantool.Connection, error) {
 }
 
 func readAllPostsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("readAllPostsHandler")
+	log.Println("readAllPostsHandler")
 	conn, _ := connect(host, user, pass)
 	defer conn.Close()
 
@@ -57,6 +57,7 @@ func readAllPostsHandler(w http.ResponseWriter, r *http.Request) {
 
 	if resp.Error != nil {
 		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
+		return
 	}
 
 	payload := PostsColletion{make([]Post, 0)}
@@ -71,7 +72,7 @@ func readAllPostsHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func readPostComments(w http.ResponseWriter, r *http.Request) {
-	log.Printf("readPostComments")
+	log.Println("readPostComments")
 
 	idStr := r.URL.Query().Get("id")
 	id, _ := strconv.Atoi(idStr)
@@ -84,6 +85,7 @@ func readPostComments(w http.ResponseWriter, r *http.Request) {
 
 	if resp.Error != nil {
 		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
+		return
 	}
 
 	payload := CommentColletion{make([]Comment, 0)}
@@ -99,7 +101,7 @@ func readPostComments(w http.ResponseWriter, r *http.Request) {
 }
 
 func createPostHandler(w http.ResponseWriter, r *http.Request) {
-	log.Printf("createPostHandler")
+	log.Println("createPostHandler")
 	reqBody, _ := ioutil.ReadAll(r.Body)
 
 	var p Post
@@ -113,7 +115,45 @@ func createPostHandler(w http.ResponseWriter, r *http.Request) {
 		Tuple:      []interface{}{p.Content},
 	}
 	resp := conn.Exec(context.Background(), query)
-	log.Println(resp)
+
+	if resp.Error == nil {
+		w.Write([]byte("ok"))
+	} else {
+		w.Write([]byte(fmt.Sprintf("%v", resp)))
+	}
+}
+
+func createCommentHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("createCommentHandler")
+
+	idStr := r.URL.Query().Get("id")
+	id, _ := strconv.Atoi(idStr)
+
+	conn, _ := connect(host, user, pass)
+	defer conn.Close()
+
+	query := &tarantool.Select{Space: "post", Index: "primary", Key: id}
+	resp := conn.Exec(context.Background(), query)
+
+	if resp.Error != nil {
+		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
+		return
+	}
+
+	if len(resp.Data) == 0 {
+		w.Write([]byte("No such post"))
+		return
+	}
+
+	reqBody, _ := ioutil.ReadAll(r.Body)
+	var cm Comment
+	json.Unmarshal(reqBody, &cm)
+
+	query2 := &tarantool.Eval{
+		Expression: "box.space.comment:auto_increment{...}",
+		Tuple:      []interface{}{cm.Content, cm.Ref},
+	}
+	resp = conn.Exec(context.Background(), query2)
 
 	if resp.Error == nil {
 		w.Write([]byte("ok"))
@@ -125,6 +165,7 @@ func createPostHandler(w http.ResponseWriter, r *http.Request) {
 func main() {
 	r := mux.NewRouter()
 	r.HandleFunc("/post", createPostHandler).Methods("Post")
+	r.HandleFunc("/comment", createCommentHandler).Methods("Post")
 	r.HandleFunc("/posts", readAllPostsHandler).Methods("Get")
 	r.HandleFunc("/comments", readPostComments).Methods("Get")
 	http.Handle("/", r)
