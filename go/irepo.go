@@ -10,7 +10,7 @@ type Comment struct {
 	Ref int `json:"ref"`
 }
 
-type PostsColletion struct {
+type PostColletion struct {
 	Posts []Post `json:"posts"`
 }
 
@@ -20,7 +20,8 @@ type CommentColletion struct {
 
 type IRepo interface {
 	CreatePost(p Post) error
-	// CreateComment(cm Comment) error
-	// ReadAllPosts() (PostsColletion, error)
-	// ReadPostComments() (CommentColletion, error)
+	CreateComment(id int, cm Comment) error
+	ReadAllPosts() (PostColletion, error)
+	ReadPostComments(id int) (CommentColletion, error)
+	Reset() error
 }

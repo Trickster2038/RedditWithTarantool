@@ -1,18 +1,14 @@
 package main
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io/ioutil"
 	"log"
 	"net/http"
-	"strconv"
 
 	"github.com/gorilla/mux"
-	tarantool "github.com/viciious/go-tarantool"
 )
 
+// use .env file in production
 var (
 	host       = "127.0.0.1:3301"
 	user       = "admin"
@@ -20,128 +16,17 @@ var (
 	accessPort = "8085"
 )
 
-func connect(host, user, pass string) (*tarantool.Connection, error) {
-	opts := tarantool.Options{User: user, Password: pass}
-	conn, err := tarantool.Connect(host, &opts)
-	if err != nil {
-		return &tarantool.Connection{}, err
-	}
-	return conn, nil
-}
-
-func readAllPostsHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("readAllPostsHandler")
-	conn, _ := connect(host, user, pass)
-	defer conn.Close()
-
-	query := &tarantool.Select{Space: "post"}
-	resp := conn.Exec(context.Background(), query)
-
-	if resp.Error != nil {
-		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
-		return
-	}
-
-	payload := PostsColletion{make([]Post, 0)}
-	p := Post{}
-	for _, tuple := range resp.Data {
-		p.ID = int(tuple[0].(int64))
-		p.Content = tuple[1].(string)
-		payload.Posts = append(payload.Posts, p)
-	}
-
-	json.NewEncoder(w).Encode(payload)
-}
-
-func readPostComments(w http.ResponseWriter, r *http.Request) {
-	log.Println("readPostComments")
-
-	idStr := r.URL.Query().Get("id")
-	id, _ := strconv.Atoi(idStr)
-
-	conn, _ := connect(host, user, pass)
-	defer conn.Close()
-
-	query := &tarantool.Select{Space: "comment", Index: "ref_idx", Key: id}
-	resp := conn.Exec(context.Background(), query)
-
-	if resp.Error != nil {
-		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
-		return
-	}
-
-	payload := CommentColletion{make([]Comment, 0)}
-	cm := Comment{}
-	for _, tuple := range resp.Data {
-		cm.ID = int(tuple[0].(int64))
-		cm.Content = tuple[1].(string)
-		cm.Ref = int(tuple[2].(int64))
-		payload.Comments = append(payload.Comments, cm)
-	}
-
-	json.NewEncoder(w).Encode(payload)
-}
-
-func createCommentHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("createCommentHandler")
-
-	idStr := r.URL.Query().Get("id")
-	id, _ := strconv.Atoi(idStr)
-
-	conn, _ := connect(host, user, pass)
-	defer conn.Close()
-
-	query := &tarantool.Select{Space: "post", Index: "primary", Key: id}
-	resp := conn.Exec(context.Background(), query)
-
-	if resp.Error != nil {
-		w.Write([]byte(fmt.Sprintf("Select failed: %s", resp.Error)))
-		return
-	}
-
-	if len(resp.Data) == 0 {
-		w.Write([]byte("No such post"))
-		return
-	}
-
-	reqBody, _ := ioutil.ReadAll(r.Body)
-	var cm Comment
-	json.Unmarshal(reqBody, &cm)
-
-	query2 := &tarantool.Eval{
-		Expression: "box.space.comment:auto_increment{...}",
-		Tuple:      []interface{}{cm.Content, cm.Ref},
-	}
-	resp = conn.Exec(context.Background(), query2)
-
-	if resp.Error == nil {
-		w.Write([]byte("ok"))
-	} else {
-		w.Write([]byte(fmt.Sprintf("%v", resp)))
-	}
-}
-
-func resetHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("resetHandler")
-
-	conn, _ := connect(host, user, pass)
-	defer conn.Close()
-
-	query := &tarantool.Eval{Expression: "box.space.post:truncate()"}
-	resp := conn.Exec(context.Background(), query)
-	if resp.Error != nil {
-		w.Write([]byte(fmt.Sprintf("%v", resp)))
-		return
-	}
-
-	query = &tarantool.Eval{Expression: "box.space.comment:truncate()"}
-	resp = conn.Exec(context.Background(), query)
-
-	if resp.Error == nil {
-		w.Write([]byte("ok"))
-	} else {
-		w.Write([]byte(fmt.Sprintf("%v", resp)))
-	}
+func panicMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		log.Println("panicMiddleware", r.URL.Path)
+		defer func() {
+			if err := recover(); err != nil {
+				fmt.Println("recovered", err)
+				http.Error(w, "Internal server error", 500)
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 func main() {
@@ -149,12 +34,17 @@ func main() {
 
 	r := mux.NewRouter()
 	r.HandleFunc("/post", wrappedCreatePostHandler(&repo)).Methods("Post")
-	r.HandleFunc("/comment", createCommentHandler).Methods("Post")
-	r.HandleFunc("/reset", resetHandler).Methods("Post")
-	r.HandleFunc("/posts", readAllPostsHandler).Methods("Get")
-	r.HandleFunc("/comments", readPostComments).Methods("Get")
-	http.Handle("/", r)
+	r.HandleFunc("/comment", wrappedCreateCommentHandler(&repo)).Methods("Post")
+	r.HandleFunc("/posts", wrappedReadAllPostsHandler(&repo)).Methods("Get")
+	r.HandleFunc("/comments", wrappedReadPostCommentsHandler(&repo)).Methods("Get")
+	r.HandleFunc("/reset", wrappedResetHandler(&repo)).Methods("Post")
+
+	protectedRouter := panicMiddleware(r)
+	http.Handle("/", protectedRouter)
 
 	fmt.Printf("Server is listening on %s\n", accessPort)
-	http.ListenAndServe(":"+accessPort, nil)
+	err := http.ListenAndServe(":"+accessPort, nil)
+	if err != nil {
+		log.Fatalf("ListenAndServe error: %v", err)
+	}
 }
