@@ -4,16 +4,10 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 
 	"github.com/gorilla/mux"
-)
-
-// use .env file in production
-var (
-	host       = "127.0.0.1:3301"
-	user       = "admin"
-	pass       = "pass"
-	accessPort = "8085"
+	"github.com/joho/godotenv"
 )
 
 func panicMiddleware(next http.Handler) http.Handler {
@@ -30,6 +24,14 @@ func panicMiddleware(next http.Handler) http.Handler {
 }
 
 func main() {
+	if err := godotenv.Load("../.env"); err != nil {
+		log.Fatalln("No .env file found")
+	}
+
+	host := os.Getenv("DB_HOST")
+	user := os.Getenv("DB_USER")
+	pass := os.Getenv("DB_PASSWORD")
+	serverPort := os.Getenv("SERVER_PORT")
 	repo := TarantoolRepo{host, user, pass}
 
 	r := mux.NewRouter()
@@ -42,8 +44,8 @@ func main() {
 	protectedRouter := panicMiddleware(r)
 	http.Handle("/", protectedRouter)
 
-	fmt.Printf("Server is listening on %s\n", accessPort)
-	err := http.ListenAndServe(":"+accessPort, nil)
+	fmt.Printf("Server is listening on %s\n", serverPort)
+	err := http.ListenAndServe(":"+serverPort, nil)
 	if err != nil {
 		log.Fatalf("ListenAndServe error: %v", err)
 	}
