@@ -1,6 +1,13 @@
 # RedditWithTarantool
 
-[TOC]
+## Environment example (.env)
+
+```sh
+DB_HOST="127.0.0.1:3301"
+DB_USER="admin"
+DB_PASSWORD="pass"
+SERVER_PORT="8085"
+```
 
 
 
