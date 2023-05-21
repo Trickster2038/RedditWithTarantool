@@ -13,24 +13,6 @@ import (
 	tarantool "github.com/viciious/go-tarantool"
 )
 
-type Post struct {
-	ID      int    `json:"id"`
-	Content string `json:"content"`
-}
-
-type Comment struct {
-	Post
-	Ref int `json:"ref"`
-}
-
-type PostsColletion struct {
-	Posts []Post `json:"posts"`
-}
-
-type CommentColletion struct {
-	Comments []Comment `json:"comments"`
-}
-
 var (
 	host       = "127.0.0.1:3301"
 	user       = "admin"
@@ -100,29 +82,6 @@ func readPostComments(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(payload)
 }
 
-func createPostHandler(w http.ResponseWriter, r *http.Request) {
-	log.Println("createPostHandler")
-	reqBody, _ := ioutil.ReadAll(r.Body)
-
-	var p Post
-	json.Unmarshal(reqBody, &p)
-
-	conn, _ := connect(host, user, pass)
-	defer conn.Close()
-
-	query := &tarantool.Eval{
-		Expression: "box.space.post:auto_increment{...}",
-		Tuple:      []interface{}{p.Content},
-	}
-	resp := conn.Exec(context.Background(), query)
-
-	if resp.Error == nil {
-		w.Write([]byte("ok"))
-	} else {
-		w.Write([]byte(fmt.Sprintf("%v", resp)))
-	}
-}
-
 func createCommentHandler(w http.ResponseWriter, r *http.Request) {
 	log.Println("createCommentHandler")
 
@@ -186,8 +145,10 @@ func resetHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	repo := TarantoolRepo{host, user, pass}
+
 	r := mux.NewRouter()
-	r.HandleFunc("/post", createPostHandler).Methods("Post")
+	r.HandleFunc("/post", wrappedCreatePostHandler(&repo)).Methods("Post")
 	r.HandleFunc("/comment", createCommentHandler).Methods("Post")
 	r.HandleFunc("/reset", resetHandler).Methods("Post")
 	r.HandleFunc("/posts", readAllPostsHandler).Methods("Get")
