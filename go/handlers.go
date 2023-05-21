@@ -50,13 +50,6 @@ func wrappedCreateCommentHandler(repo IRepo) func(w http.ResponseWriter, r *http
 	return func(w http.ResponseWriter, r *http.Request) {
 		log.Println("createCommentHandler")
 
-		idStr := r.URL.Query().Get("id")
-		id, err := strconv.Atoi(idStr)
-		if err != nil {
-			SafeJsonEncode(w, map[string]string{"error": ErrQueryParams.Error()})
-			return
-		}
-
 		reqBody, err := io.ReadAll(r.Body)
 		if err != nil {
 			SafeJsonEncode(w, map[string]string{"error": ErrBody.Error()})
@@ -70,7 +63,7 @@ func wrappedCreateCommentHandler(repo IRepo) func(w http.ResponseWriter, r *http
 			return
 		}
 
-		err = repo.CreateComment(id, cm)
+		err = repo.CreateComment(cm)
 		if err == nil {
 			SafeJsonEncode(w, map[string]string{"status": MsgOk})
 		} else {

@@ -49,14 +49,14 @@ func (repo *TarantoolRepo) CreatePost(p Post) error {
 	return nil
 }
 
-func (repo *TarantoolRepo) CreateComment(id int, cm Comment) error {
+func (repo *TarantoolRepo) CreateComment(cm Comment) error {
 	conn, err := repo.connect()
 	if err != nil {
 		return ErrConnection
 	}
 	defer conn.Close()
 
-	query := &tarantool.Select{Space: "post", Index: "primary", Key: id}
+	query := &tarantool.Select{Space: "post", Index: "primary", Key: cm.Ref}
 	resp := conn.Exec(context.Background(), query)
 
 	if resp.Error != nil || len(resp.Data) == 0 {

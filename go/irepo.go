@@ -20,7 +20,7 @@ type CommentColletion struct {
 
 type IRepo interface {
 	CreatePost(p Post) error
-	CreateComment(id int, cm Comment) error
+	CreateComment(cm Comment) error
 	ReadAllPosts() (PostColletion, error)
 	ReadPostComments(id int) (CommentColletion, error)
 	Reset() error
